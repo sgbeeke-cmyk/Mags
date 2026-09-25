@@ -141,3 +141,4 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+app/build/outputs/apk/debug/app-debug.apk
