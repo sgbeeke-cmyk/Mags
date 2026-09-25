@@ -1,0 +1,6 @@
+{
+  "name": "Musicy",
+  "description": "High-fidelity offline FLAC music player with gapless playback, customizable equalizer, embedded synced lyrics, and local playlist management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
