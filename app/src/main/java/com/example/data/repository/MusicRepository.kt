@@ -85,18 +85,37 @@ class MusicRepository(
 
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String) {
         withContext(Dispatchers.IO) {
-            playlistDao.addTrackToPlaylist(
-                PlaylistTrackCrossRef(
-                    playlistId = playlistId,
-                    trackId = trackId
-                )
-            )
+            playlistDao.addTrackToEnd(playlistId, trackId)
+        }
+    }
+
+    suspend fun addTracksToPlaylist(playlistId: Long, trackIds: List<String>) {
+        withContext(Dispatchers.IO) {
+            playlistDao.addTracksToEnd(playlistId, trackIds)
         }
     }
 
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
         withContext(Dispatchers.IO) {
-            playlistDao.removeTrackFromPlaylist(playlistId, trackId)
+            playlistDao.removeTrackAndCompact(playlistId, trackId)
+        }
+    }
+
+    suspend fun reorderPlaylistTracks(playlistId: Long, orderedTrackIds: List<String>) {
+        withContext(Dispatchers.IO) {
+            playlistDao.reorderTracks(playlistId, orderedTrackIds)
+        }
+    }
+
+    suspend fun moveTrackInPlaylist(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        withContext(Dispatchers.IO) {
+            playlistDao.moveTrack(playlistId, fromIndex, toIndex)
+        }
+    }
+
+    suspend fun swapPlaylistTracks(playlistId: Long, trackIdA: String, trackIdB: String) {
+        withContext(Dispatchers.IO) {
+            playlistDao.swapTrackPositions(playlistId, trackIdA, trackIdB)
         }
     }
 

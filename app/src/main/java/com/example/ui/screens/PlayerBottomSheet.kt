@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -78,8 +79,10 @@ import com.example.player.RepeatMode
 import com.example.player.ShuffleMode
 import com.example.player.SleepTimerState
 import com.example.ui.components.AudioVisualizer
+import com.example.ui.components.CustomMediaController
 import com.example.ui.components.HiResBadge
 import com.example.ui.components.LyricsView
+import com.example.ui.components.MediaPlayerSettingsDialog
 import com.example.ui.components.RealtimeVisualizerCanvas
 import com.example.ui.components.RealtimeVisualizerControlPanel
 import com.example.visualizer.VisualizerFrame
@@ -107,6 +110,7 @@ fun PlayerBottomSheet(
     isShuffleEnabled: Boolean,
     isGaplessEnabled: Boolean,
     sleepTimerState: SleepTimerState,
+    isAutoPlayNext: Boolean = true,
     shuffleMode: ShuffleMode = if (isShuffleEnabled) ShuffleMode.STANDARD else ShuffleMode.OFF,
     smartShuffleReason: String? = null,
     visualizerFrame: VisualizerFrame = VisualizerFrame(),
@@ -116,6 +120,8 @@ fun PlayerBottomSheet(
     onSelectVisualizerStyle: (VisualizerStyle) -> Unit = {},
     onTogglePlayPause: () -> Unit,
     onSeekTo: (Long) -> Unit,
+    onSeekForward: (() -> Unit)? = null,
+    onSeekBack: (() -> Unit)? = null,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onToggleRepeat: () -> Unit,
@@ -124,6 +130,11 @@ fun PlayerBottomSheet(
     onOpenEqualizer: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenSleepTimer: () -> Unit,
+    onToggleAutoPlayNext: (Boolean) -> Unit = {},
+    onToggleGapless: (Boolean) -> Unit = {},
+    onStartSleepTimerPreset: (Int) -> Unit = {},
+    onStartSleepTimerEndOfTrack: () -> Unit = {},
+    onCancelSleepTimer: () -> Unit = {},
     onInspectTrack: (Track) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -132,8 +143,31 @@ fun PlayerBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showLyricsMode by remember { mutableStateOf(false) }
     var showVisualizerMode by remember { mutableStateOf(false) }
+    var isSettingsDialogOpen by remember { mutableStateOf(false) }
     var isDraggingSlider by remember { mutableStateOf(false) }
     var sliderDragPosition by remember { mutableFloatStateOf(0f) }
+
+    if (isSettingsDialogOpen) {
+        MediaPlayerSettingsDialog(
+            sleepTimerState = sleepTimerState,
+            isAutoPlayNext = isAutoPlayNext,
+            isGaplessEnabled = isGaplessEnabled,
+            onToggleAutoPlayNext = onToggleAutoPlayNext,
+            onToggleGapless = onToggleGapless,
+            onOpenFullSleepTimerDialog = {
+                isSettingsDialogOpen = false
+                onOpenSleepTimer()
+            },
+            onStartSleepTimerPreset = onStartSleepTimerPreset,
+            onStartSleepTimerEndOfTrack = onStartSleepTimerEndOfTrack,
+            onCancelSleepTimer = onCancelSleepTimer,
+            onOpenEqualizer = {
+                isSettingsDialogOpen = false
+                onOpenEqualizer()
+            },
+            onDismiss = { isSettingsDialogOpen = false }
+        )
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -225,6 +259,17 @@ fun PlayerBottomSheet(
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "View audio specifications",
+                            tint = AuraTextSecondary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { isSettingsDialogOpen = true },
+                        modifier = Modifier.testTag("player_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Media player settings",
                             tint = AuraTextSecondary
                         )
                     }
@@ -545,147 +590,96 @@ fun PlayerBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Scrubber Slider
-            val currentPos = if (isDraggingSlider) sliderDragPosition else playbackPositionMs.toFloat()
-            val totalDur = durationMs.coerceAtLeast(1L).toFloat()
-
-            Slider(
-                value = (currentPos / totalDur).coerceIn(0f, 1f),
-                onValueChange = { fraction ->
-                    isDraggingSlider = true
-                    sliderDragPosition = fraction * totalDur
-                },
-                onValueChangeFinished = {
-                    isDraggingSlider = false
-                    onSeekTo(sliderDragPosition.toLong())
-                },
-                modifier = Modifier
-                    .testTag("playback_slider")
-                    .fillMaxWidth()
-                    .height(28.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = AuraCyanPrimary,
-                    activeTrackColor = AuraCyanPrimary,
-                    inactiveTrackColor = Color(0xFF222B3B)
-                )
+            // Custom MediaController UI Component (Media3 ExoPlayer Session)
+            CustomMediaController(
+                track = track,
+                isPlaying = isPlaying,
+                playbackPositionMs = playbackPositionMs,
+                durationMs = durationMs,
+                onTogglePlayPause = onTogglePlayPause,
+                onSeekTo = onSeekTo,
+                onSkipNext = onSkipNext,
+                onSkipPrevious = onSkipPrevious,
+                onSeekForward = onSeekForward ?: { onSeekTo((playbackPositionMs + 10_000L).coerceAtMost(durationMs)) },
+                onSeekBack = onSeekBack ?: { onSeekTo((playbackPositionMs - 10_000L).coerceAtLeast(0L)) },
+                showTrackHeader = false,
+                isMediaSessionActive = true
             )
 
-            // Timestamps: Elapsed & Remaining
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = formatMs(currentPos.toLong()),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = AuraTextMuted
-                )
-                val remainingMs = (durationMs - currentPos.toLong()).coerceAtLeast(0L)
-                Text(
-                    text = "-${formatMs(remainingMs)}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = AuraTextMuted
-                )
-            }
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Transport Controls: Shuffle, Previous, Play/Pause, Next, Repeat
+            // Secondary Audio Modes Row: Shuffle, Repeat
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shuffle (Tri-state: Off -> Standard -> Smart -> Off)
-                Box(contentAlignment = Alignment.Center) {
-                    IconButton(
-                        onClick = onToggleShuffle,
-                        modifier = Modifier.testTag("player_shuffle_button")
-                    ) {
-                        Icon(
-                            imageVector = if (shuffleMode == ShuffleMode.SMART) Icons.Default.AutoAwesome else Icons.Default.Shuffle,
-                            contentDescription = "Shuffle mode: ${shuffleMode.label}",
-                            tint = when (shuffleMode) {
-                                ShuffleMode.OFF -> AuraTextMuted
-                                ShuffleMode.STANDARD -> AuraCyanPrimary
-                                ShuffleMode.SMART -> AuraCyanPrimary
-                            },
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    if (shuffleMode == ShuffleMode.SMART) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(AuraCyanPrimary)
-                        )
-                    }
-                }
-
-                // Previous
-                IconButton(
-                    onClick = onSkipPrevious,
-                    modifier = Modifier.testTag("player_previous_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipPrevious,
-                        contentDescription = "Previous track",
-                        tint = AuraTextPrimary,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-
-                // Play / Pause Large Primary Button
-                Box(
+                // Shuffle Mode Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(68.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(listOf(AuraCyanPrimary, AuraVioletSecondary))
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (shuffleMode != ShuffleMode.OFF) AuraCyanPrimary.copy(alpha = 0.15f) else AuraDarkCard)
+                        .border(
+                            1.dp,
+                            if (shuffleMode != ShuffleMode.OFF) AuraCyanPrimary.copy(alpha = 0.5f) else AuraDarkBorder,
+                            RoundedCornerShape(8.dp)
                         )
-                        .clickable(onClick = onTogglePlayPause)
-                        .testTag("player_play_pause_button"),
-                    contentAlignment = Alignment.Center
+                        .clickable(onClick = onToggleShuffle)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("player_shuffle_button")
                 ) {
                     Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause track" else "Play track",
-                        tint = AuraDarkBackground,
-                        modifier = Modifier.size(36.dp)
+                        imageVector = if (shuffleMode == ShuffleMode.SMART) Icons.Default.AutoAwesome else Icons.Default.Shuffle,
+                        contentDescription = "Shuffle mode: ${shuffleMode.label}",
+                        tint = if (shuffleMode != ShuffleMode.OFF) AuraCyanPrimary else AuraTextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Shuffle: ${shuffleMode.label}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (shuffleMode != ShuffleMode.OFF) AuraCyanPrimary else AuraTextMuted
                     )
                 }
 
-                // Next
-                IconButton(
-                    onClick = onSkipNext,
-                    modifier = Modifier.testTag("player_next_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = "Next track",
-                        tint = AuraTextPrimary,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-
-                // Repeat Mode
-                IconButton(
-                    onClick = onToggleRepeat,
-                    modifier = Modifier.testTag("player_repeat_button")
+                // Repeat Mode Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (repeatMode != RepeatMode.OFF) AuraCyanPrimary.copy(alpha = 0.15f) else AuraDarkCard)
+                        .border(
+                            1.dp,
+                            if (repeatMode != RepeatMode.OFF) AuraCyanPrimary.copy(alpha = 0.5f) else AuraDarkBorder,
+                            RoundedCornerShape(8.dp)
+                        )
+                        .clickable(onClick = onToggleRepeat)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("player_repeat_button")
                 ) {
                     val icon = if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
-                    val tint = if (repeatMode != RepeatMode.OFF) AuraCyanPrimary else AuraTextMuted
                     Icon(
                         imageVector = icon,
                         contentDescription = "Toggle repeat: $repeatMode",
-                        tint = tint,
-                        modifier = Modifier.size(24.dp)
+                        tint = if (repeatMode != RepeatMode.OFF) AuraCyanPrimary else AuraTextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = when (repeatMode) {
+                            RepeatMode.OFF -> "Repeat Off"
+                            RepeatMode.ALL -> "Repeat All"
+                            RepeatMode.ONE -> "Repeat One"
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (repeatMode != RepeatMode.OFF) AuraCyanPrimary else AuraTextMuted
                     )
                 }
             }

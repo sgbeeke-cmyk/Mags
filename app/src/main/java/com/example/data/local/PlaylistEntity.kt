@@ -1,15 +1,23 @@
 package com.example.data.local
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.data.model.Playlist
 
-@Entity(tableName = "playlists")
+@Entity(
+    tableName = "playlists",
+    indices = [
+        Index(value = ["createdAt"])
+    ]
+)
 data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val description: String = "",
     val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
     val accentColorHex: String = "#4DEEEA"
 ) {
     fun toPlaylist(trackCount: Int = 0): Playlist = Playlist(
@@ -24,7 +32,26 @@ data class PlaylistEntity(
 
 @Entity(
     tableName = "playlist_tracks",
-    primaryKeys = ["playlistId", "trackId"]
+    primaryKeys = ["playlistId", "trackId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = PlaylistEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["playlistId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = TrackEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["trackId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["playlistId"]),
+        Index(value = ["trackId"]),
+        Index(value = ["playlistId", "orderIndex"])
+    ]
 )
 data class PlaylistTrackCrossRef(
     val playlistId: Long,

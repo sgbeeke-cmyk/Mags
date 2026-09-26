@@ -13,13 +13,16 @@ import kotlinx.coroutines.flow.asStateFlow
 class AudioFxManager {
     companion object {
         private const val TAG = "AudioFxManager"
-        val DEFAULT_FREQUENCIES = listOf(60, 230, 910, 3600, 14000)
+        val DEFAULT_FREQUENCIES = listOf(60, 250, 1000, 4000, 16000)
     }
 
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
     private var currentSessionId: Int = 0
+
+    private val _audioSessionId = MutableStateFlow(0)
+    val audioSessionId: StateFlow<Int> = _audioSessionId.asStateFlow()
 
     private val _bands = MutableStateFlow(
         DEFAULT_FREQUENCIES.mapIndexed { index, freq ->
@@ -48,22 +51,12 @@ class AudioFxManager {
     fun attachAudioSession(audioSessionId: Int) {
         if (audioSessionId == 0 || audioSessionId == currentSessionId) return
         currentSessionId = audioSessionId
+        _audioSessionId.value = audioSessionId
 
         releaseFx()
 
         try {
             val eq = Equalizer(0, audioSessionId)
-            val numBands = eq.numberOfBands.toInt()
-            if (numBands > 0) {
-                val bandList = mutableListOf<EqualizerBand>()
-                for (i in 0 until numBands) {
-                    val centerFreqHz = eq.getCenterFreq(i.toShort()) / 1000
-                    val currentMilliBels = eq.getBandLevel(i.toShort())
-                    val gainDb = currentMilliBels / 100f
-                    bandList.add(EqualizerBand(index = i, centerFreqHz = centerFreqHz, gainDb = gainDb))
-                }
-                _bands.value = bandList
-            }
             eq.enabled = _isEnabled.value
             equalizer = eq
         } catch (e: Exception) {
@@ -106,12 +99,33 @@ class AudioFxManager {
             equalizer?.let { eq ->
                 try {
                     val milliBels = (gainDb * 100f).toInt().coerceIn(-1200, 1200).toShort()
-                    eq.setBandLevel(bandIndex.toShort(), milliBels)
+                    val hwBand = mapToHardwareBand(bandIndex, eq)
+                    eq.setBandLevel(hwBand.toShort(), milliBels)
                 } catch (e: Exception) {
                     Log.w(TAG, "Error setting band level: ${e.message}")
                 }
             }
         }
+    }
+
+    private fun mapToHardwareBand(bandIndex: Int, eq: Equalizer): Int {
+        val numBands = eq.numberOfBands.toInt()
+        if (numBands <= 0) return 0
+        if (numBands == 5) return bandIndex.coerceIn(0, 4)
+        val targetFreq = DEFAULT_FREQUENCIES.getOrElse(bandIndex) { 1000 }
+        return (0 until numBands).minByOrNull { i ->
+            kotlin.math.abs(eq.getCenterFreq(i.toShort()) / 1000 - targetFreq)
+        } ?: bandIndex.coerceIn(0, numBands - 1)
+    }
+
+    fun resetToFlat() {
+        _currentPresetName.value = "Audiophile Flat"
+        _bands.value = DEFAULT_FREQUENCIES.mapIndexed { index, freq ->
+            EqualizerBand(index = index, centerFreqHz = freq, gainDb = 0f)
+        }
+        _bassBoostLevel.value = 0
+        _virtualizerLevel.value = 0
+        reapplyCurrentState()
     }
 
     fun setBassBoost(strength: Int) {
@@ -170,10 +184,9 @@ class AudioFxManager {
         if (eq != null) {
             try {
                 _bands.value.forEachIndexed { index, band ->
-                    if (index < eq.numberOfBands) {
-                        val mb = (band.gainDb * 100f).toInt().coerceIn(-1200, 1200).toShort()
-                        eq.setBandLevel(index.toShort(), mb)
-                    }
+                    val hwBand = mapToHardwareBand(index, eq)
+                    val mb = (band.gainDb * 100f).toInt().coerceIn(-1200, 1200).toShort()
+                    eq.setBandLevel(hwBand.toShort(), mb)
                 }
                 eq.enabled = _isEnabled.value
             } catch (e: Exception) {
@@ -201,6 +214,7 @@ class AudioFxManager {
     }
 
     fun releaseFx() {
+        _audioSessionId.value = 0
         try {
             equalizer?.release()
             equalizer = null

@@ -10,6 +10,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
 import com.example.audio.metadata.LyricsParser
 import com.example.data.model.LyricsData
 import com.example.data.model.Track
@@ -47,6 +48,10 @@ class PlaybackManager(
                 .build(),
             /* handleAudioFocus = */ true
         )
+        .build()
+
+    val mediaSession: MediaSession = MediaSession.Builder(context, exoPlayer)
+        .setId("MusicyMediaSession")
         .build()
 
     private val _currentTrack = MutableStateFlow<Track?>(null)
@@ -89,6 +94,9 @@ class PlaybackManager(
     private val _isGaplessEnabled = MutableStateFlow(true)
     val isGaplessEnabled: StateFlow<Boolean> = _isGaplessEnabled.asStateFlow()
 
+    private val _isAutoPlayNext = MutableStateFlow(true)
+    val isAutoPlayNext: StateFlow<Boolean> = _isAutoPlayNext.asStateFlow()
+
     private val _currentLyrics = MutableStateFlow(LyricsData(false, emptyList()))
     val currentLyrics: StateFlow<LyricsData> = _currentLyrics.asStateFlow()
 
@@ -102,6 +110,11 @@ class PlaybackManager(
     init {
         setupPlayerListener()
         exoPlayer.repeatMode = Player.REPEAT_MODE_ALL
+    }
+
+    fun setAutoPlayNext(enabled: Boolean) {
+        _isAutoPlayNext.value = enabled
+        exoPlayer.pauseAtEndOfMediaItems = !enabled
     }
 
     private fun setupPlayerListener() {
@@ -135,7 +148,7 @@ class PlaybackManager(
                             exoPlayer.pause()
                             cancelSleepTimer()
                         }
-                        if (_repeatMode.value == RepeatMode.OFF && _queueIndex.value >= _queue.value.lastIndex) {
+                        if (!_isAutoPlayNext.value || (_repeatMode.value == RepeatMode.OFF && _queueIndex.value >= _queue.value.lastIndex)) {
                             _isPlaying.value = false
                             stopPositionTicker()
                         }
@@ -148,6 +161,13 @@ class PlaybackManager(
                 if (_sleepTimerState.value.isActive && (_sleepTimerState.value.isWaitingForTrackEnd || (_sleepTimerState.value.finishCurrentTrackFirst && _sleepTimerState.value.remainingSeconds <= 0))) {
                     exoPlayer.pause()
                     cancelSleepTimer()
+                    return
+                }
+
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && !_isAutoPlayNext.value) {
+                    exoPlayer.pause()
+                    _isPlaying.value = false
+                    stopPositionTicker()
                     return
                 }
 
@@ -257,6 +277,21 @@ class PlaybackManager(
     fun seekTo(positionMs: Long) {
         _playbackPositionMs.value = positionMs
         exoPlayer.seekTo(positionMs)
+    }
+
+    fun seekForward(deltaMs: Long = 10_000L) {
+        val total = _durationMs.value.coerceAtLeast(0L)
+        val target = if (total > 0) {
+            (_playbackPositionMs.value + deltaMs).coerceAtMost(total)
+        } else {
+            _playbackPositionMs.value + deltaMs
+        }
+        seekTo(target)
+    }
+
+    fun seekBack(deltaMs: Long = 10_000L) {
+        val target = (_playbackPositionMs.value - deltaMs).coerceAtLeast(0L)
+        seekTo(target)
     }
 
     fun skipToNext() {
@@ -525,6 +560,7 @@ class PlaybackManager(
         stopPositionTicker()
         visualizerEngine.release()
         audioFxManager.releaseFx()
+        mediaSession.release()
         exoPlayer.release()
     }
 }

@@ -20,18 +20,24 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -92,6 +98,11 @@ fun PlaylistsScreen(
     onShuffleAll: (List<Track>) -> Unit,
     onSmartShuffleAll: ((List<Track>) -> Unit)? = null,
     onRemoveTrackFromPlaylist: (Long, String) -> Unit,
+    allLocalTracks: List<Track> = emptyList(),
+    onAddTrackToPlaylist: (Long, String) -> Unit = { _, _ -> },
+    onAddTracksToPlaylist: (Long, List<String>) -> Unit = { _, _ -> },
+    onMoveTrack: (Long, Int, Int) -> Unit = { _, _, _ -> },
+    onReorderTracks: (Long, List<String>) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -154,7 +165,7 @@ fun PlaylistsScreen(
                             showCreateDialog = false
                         }
                     },
-                    modifier = Modifier.testTag("dialog_create_playlist_button"),
+                    modifier = Modifier.testTag("confirm_create_playlist_button"),
                     colors = ButtonDefaults.buttonColors(containerColor = AuraCyanPrimary, contentColor = AuraDarkBackground)
                 ) {
                     Text("Create", fontWeight = FontWeight.Bold)
@@ -162,14 +173,13 @@ fun PlaylistsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCreateDialog = false }) {
-                    Text("Cancel", color = AuraTextSecondary)
+                    Text("Cancel", color = AuraTextMuted)
                 }
             }
         )
     }
 
     if (selectedPlaylist != null) {
-        // Detailed Playlist View
         PlaylistDetailContent(
             playlist = selectedPlaylist,
             tracks = selectedPlaylistTracks,
@@ -179,13 +189,19 @@ fun PlaylistsScreen(
             onPlayTrack = { track -> onPlayTrack(track, selectedPlaylistTracks) },
             onPlayAll = { onPlayAll(selectedPlaylistTracks) },
             onShuffleAll = { onShuffleAll(selectedPlaylistTracks) },
-            onSmartShuffleAll = { onSmartShuffleAll?.invoke(selectedPlaylistTracks) ?: onShuffleAll(selectedPlaylistTracks) },
+            onSmartShuffleAll = onSmartShuffleAll?.let { cb -> { cb(selectedPlaylistTracks) } },
             onRemoveTrack = { trackId -> onRemoveTrackFromPlaylist(selectedPlaylist.id, trackId) },
-            onDeletePlaylist = { onDeletePlaylist(selectedPlaylist.id) },
+            onDeletePlaylist = {
+                onDeletePlaylist(selectedPlaylist.id)
+                onClearSelectedPlaylist()
+            },
+            allLocalTracks = allLocalTracks,
+            onAddTrack = { trackId -> onAddTrackToPlaylist(selectedPlaylist.id, trackId) },
+            onAddTracks = { trackIds -> onAddTracksToPlaylist(selectedPlaylist.id, trackIds) },
+            onMoveTrack = { from, to -> onMoveTrack(selectedPlaylist.id, from, to) },
             modifier = modifier
         )
     } else {
-        // Grid / List of Playlists
         Column(
             modifier = modifier
                 .testTag("playlists_screen")
@@ -202,13 +218,13 @@ fun PlaylistsScreen(
             ) {
                 Column {
                     Text(
-                        text = "Local Playlists",
+                        text = "Playlists",
                         fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = AuraTextPrimary
                     )
                     Text(
-                        text = "${playlists.size} custom collections",
+                        text = "${playlists.size} curated FLAC collections",
                         fontSize = 12.sp,
                         color = AuraTextSecondary
                     )
@@ -217,59 +233,85 @@ fun PlaylistsScreen(
                 Button(
                     onClick = { showCreateDialog = true },
                     modifier = Modifier.testTag("create_playlist_button"),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AuraCyanPrimary,
                         contentColor = AuraDarkBackground
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    )
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "New Playlist",
+                        modifier = Modifier.size(16.dp)
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("New Playlist", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("New Playlist", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
 
             if (playlists.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                        .fillMaxSize()
+                        .padding(20.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.PlaylistPlay,
+                            imageVector = Icons.Default.QueueMusic,
                             contentDescription = null,
                             tint = AuraTextMuted,
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(64.dp)
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No playlists created yet",
-                            color = AuraTextSecondary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
+                            text = "No Playlists Yet",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AuraTextPrimary
                         )
+                        Text(
+                            text = "Create custom FLAC playlists to organize your studio recordings and hi-res albums.",
+                            fontSize = 13.sp,
+                            color = AuraTextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { showCreateDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AuraCyanPrimary,
+                                contentColor = AuraDarkBackground
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Create First Playlist", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier
-                        .testTag("playlists_grid")
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(bottom = 100.dp),
+                        .testTag("playlists_grid"),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(playlists, key = { it.id }) { playlist ->
-                        PlaylistCard(
+                        PlaylistGridCard(
                             playlist = playlist,
                             onClick = { onSelectPlaylist(playlist) },
                             onDelete = { onDeletePlaylist(playlist.id) }
                         )
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
             }
@@ -278,24 +320,33 @@ fun PlaylistsScreen(
 }
 
 @Composable
-private fun PlaylistCard(
+private fun PlaylistGridCard(
     playlist: Playlist,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
+    val accentColor = remember(playlist.accentColorHex) {
+        try {
+            Color(android.graphics.Color.parseColor(playlist.accentColorHex))
+        } catch (_: Exception) {
+            AuraCyanPrimary
+        }
+    }
+
     Card(
-        modifier = Modifier
+        modifier = modifier
             .testTag("playlist_card_${playlist.id}")
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = AuraDarkCard),
         border = androidx.compose.foundation.BorderStroke(1.dp, AuraDarkBorder)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Icon header with accent gradient
+            // Header with icon and options menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -303,30 +354,33 @@ private fun PlaylistCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(
-                            Brush.linearGradient(listOf(AuraCyanPrimary.copy(alpha = 0.8f), AuraVioletSecondary))
-                        ),
+                            Brush.linearGradient(
+                                colors = listOf(accentColor.copy(alpha = 0.35f), AuraDarkSurface)
+                            )
+                        )
+                        .border(1.dp, accentColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.QueueMusic,
+                        imageVector = Icons.Default.PlaylistPlay,
                         contentDescription = null,
-                        tint = AuraDarkBackground,
-                        modifier = Modifier.size(22.dp)
+                        tint = accentColor,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
                 Box {
                     IconButton(
                         onClick = { showMenu = true },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(28.dp).testTag("playlist_menu_${playlist.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Playlist menu",
-                            tint = AuraTextSecondary,
+                            contentDescription = "Playlist Options",
+                            tint = AuraTextMuted,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -339,11 +393,11 @@ private fun PlaylistCard(
                         DropdownMenuItem(
                             text = { Text("Delete Playlist", color = Color(0xFFFF5252)) },
                             leadingIcon = {
-                                Icon(imageVector = Icons.Default.Delete, contentDescription = null, tint = Color(0xFFFF5252))
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFFF5252))
                             },
                             onClick = {
-                                onDelete()
                                 showMenu = false
+                                onDelete()
                             }
                         )
                     }
@@ -397,8 +451,27 @@ private fun PlaylistDetailContent(
     onSmartShuffleAll: (() -> Unit)? = null,
     onRemoveTrack: (String) -> Unit,
     onDeletePlaylist: () -> Unit,
+    allLocalTracks: List<Track> = emptyList(),
+    onAddTrack: (String) -> Unit = {},
+    onAddTracks: (List<String>) -> Unit = {},
+    onMoveTrack: (Int, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
+    var showAddTracksDialog by remember { mutableStateOf(false) }
+
+    if (showAddTracksDialog) {
+        AddTracksToPlaylistDialog(
+            playlistName = playlist.name,
+            allLocalTracks = allLocalTracks,
+            existingTrackIds = remember(tracks) { tracks.map { it.id }.toSet() },
+            onDismiss = { showAddTracksDialog = false },
+            onAddSelectedTracks = { selectedIds ->
+                onAddTracks(selectedIds)
+                showAddTracksDialog = false
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .testTag("playlist_detail_screen")
@@ -440,6 +513,30 @@ private fun PlaylistDetailContent(
                     color = AuraTextSecondary
                 )
             }
+
+            // Quick Add Local Tracks Button in Header
+            IconButton(
+                onClick = { showAddTracksDialog = true },
+                modifier = Modifier.testTag("playlist_header_add_tracks_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlaylistAdd,
+                    contentDescription = "Add local tracks",
+                    tint = AuraCyanPrimary
+                )
+            }
+
+            // Delete playlist button
+            IconButton(
+                onClick = onDeletePlaylist,
+                modifier = Modifier.testTag("playlist_delete_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete playlist",
+                    tint = AuraTextMuted
+                )
+            }
         }
 
         // Action Buttons Row: Play, Shuffle, Smart Shuffle
@@ -447,14 +544,14 @@ private fun PlaylistDetailContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = onPlayAll,
                     modifier = Modifier.weight(1f).height(40.dp).testTag("playlist_play_all"),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AuraCyanPrimary, contentColor = AuraDarkBackground)
                 ) {
                     Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -466,7 +563,7 @@ private fun PlaylistDetailContent(
                     onClick = onShuffleAll,
                     modifier = Modifier.weight(1f).height(40.dp).testTag("playlist_shuffle_all"),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AuraDarkCard, contentColor = AuraTextPrimary),
                     border = androidx.compose.foundation.BorderStroke(1.dp, AuraDarkBorder)
                 ) {
@@ -479,7 +576,7 @@ private fun PlaylistDetailContent(
                     onClick = { onSmartShuffleAll?.invoke() ?: onShuffleAll() },
                     modifier = Modifier.weight(1.35f).height(40.dp).testTag("playlist_smart_shuffle"),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AuraCyanPrimary.copy(alpha = 0.15f),
                         contentColor = AuraCyanPrimary
@@ -493,18 +590,79 @@ private fun PlaylistDetailContent(
             }
         }
 
-        // Track items in playlist
+        // Secondary Info & Add Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TRACK ORDER (${tracks.size})",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = AuraTextMuted,
+                letterSpacing = 1.sp
+            )
+
+            TextButton(
+                onClick = { showAddTracksDialog = true },
+                modifier = Modifier.testTag("playlist_add_local_tracks_action")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = AuraCyanPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Add Local Tracks",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AuraCyanPrimary
+                )
+            }
+        }
+
+        // Track items in playlist with Move Up, Move Down, and Remove actions
         if (tracks.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "No tracks in this playlist.\nAdd tracks from the Library tab.",
-                    color = AuraTextSecondary,
-                    fontSize = 14.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = AuraTextMuted,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Text(
+                        text = "No tracks in this playlist yet.",
+                        color = AuraTextSecondary,
+                        fontSize = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Button(
+                        onClick = { showAddTracksDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AuraCyanPrimary,
+                            contentColor = AuraDarkBackground
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("empty_playlist_add_tracks_btn")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Add Tracks from Local Storage", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -512,8 +670,11 @@ private fun PlaylistDetailContent(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(tracks, key = { it.id }) { track ->
+                itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
                     val isCurrent = currentTrack?.id == track.id
+                    val isFirst = index == 0
+                    val isLast = index == tracks.lastIndex
+
                     Row(
                         modifier = Modifier
                             .testTag("playlist_item_${track.id}")
@@ -521,9 +682,28 @@ private fun PlaylistDetailContent(
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isCurrent) AuraDarkSurfaceVariant else AuraDarkCard)
                             .clickable { onPlayTrack(track) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Position order index badge
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(if (isCurrent) AuraCyanPrimary.copy(alpha = 0.2f) else Color(0xFF1B2333)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${index + 1}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCurrent) AuraCyanPrimary else AuraTextMuted
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // Title & Artist
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
@@ -547,23 +727,263 @@ private fun PlaylistDetailContent(
                             )
                         }
 
-                        IconButton(
-                            onClick = { onRemoveTrack(track.id) },
-                            modifier = Modifier.size(36.dp)
+                        // Reordering Controls: Move Up & Move Down
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Remove from playlist",
-                                tint = AuraTextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            IconButton(
+                                onClick = { onMoveTrack(index, index - 1) },
+                                enabled = !isFirst,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .testTag("playlist_move_up_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowUp,
+                                    contentDescription = "Move track up",
+                                    tint = if (!isFirst) AuraCyanPrimary else AuraTextMuted.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { onMoveTrack(index, index + 1) },
+                                enabled = !isLast,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .testTag("playlist_move_down_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Move track down",
+                                    tint = if (!isLast) AuraCyanPrimary else AuraTextMuted.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Remove track from playlist button
+                            IconButton(
+                                onClick = { onRemoveTrack(track.id) },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .testTag("playlist_remove_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Remove from playlist",
+                                    tint = AuraTextMuted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }
+
                 item {
                     Spacer(modifier = Modifier.height(90.dp))
                 }
             }
         }
     }
+}
+
+/**
+ * Dialog to select and add tracks stored on the local device to the playlist.
+ */
+@Composable
+private fun AddTracksToPlaylistDialog(
+    playlistName: String,
+    allLocalTracks: List<Track>,
+    existingTrackIds: Set<String>,
+    onDismiss: () -> Unit,
+    onAddSelectedTracks: (List<String>) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+
+    val filteredTracks = remember(allLocalTracks, searchQuery) {
+        if (searchQuery.isBlank()) {
+            allLocalTracks
+        } else {
+            allLocalTracks.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                it.artist.contains(searchQuery, ignoreCase = true) ||
+                it.album.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = AuraDarkSurface,
+        shape = RoundedCornerShape(20.dp),
+        title = {
+            Column {
+                Text(
+                    text = "Add Tracks to Playlist",
+                    fontWeight = FontWeight.Bold,
+                    color = AuraTextPrimary,
+                    fontSize = 18.sp
+                )
+                Text(
+                    text = "Target: $playlistName",
+                    fontSize = 12.sp,
+                    color = AuraCyanPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(380.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search local device tracks...", color = AuraTextMuted, fontSize = 13.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = AuraTextMuted)
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("add_tracks_search_input"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = AuraDarkCard,
+                        unfocusedContainerColor = AuraDarkCard,
+                        focusedBorderColor = AuraCyanPrimary,
+                        unfocusedBorderColor = AuraDarkBorder,
+                        focusedTextColor = AuraTextPrimary,
+                        unfocusedTextColor = AuraTextPrimary
+                    )
+                )
+
+                if (filteredTracks.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No matching local tracks found.",
+                            color = AuraTextMuted,
+                            fontSize = 13.sp
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().testTag("local_tracks_picker_list"),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(filteredTracks, key = { it.id }) { track ->
+                            val alreadyInPlaylist = track.id in existingTrackIds
+                            val isSelected = track.id in selectedIds
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        when {
+                                            alreadyInPlaylist -> AuraDarkSurfaceVariant.copy(alpha = 0.5f)
+                                            isSelected -> AuraCyanPrimary.copy(alpha = 0.15f)
+                                            else -> AuraDarkCard
+                                        }
+                                    )
+                                    .clickable(enabled = !alreadyInPlaylist) {
+                                        selectedIds = if (isSelected) {
+                                            selectedIds - track.id
+                                        } else {
+                                            selectedIds + track.id
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = track.title,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (alreadyInPlaylist) AuraTextMuted else AuraTextPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${track.artist} • ${track.album}",
+                                        fontSize = 11.sp,
+                                        color = AuraTextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                if (alreadyInPlaylist) {
+                                    Text(
+                                        text = "In Playlist",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AuraTextMuted,
+                                        modifier = Modifier.padding(end = 4.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                if (isSelected) AuraCyanPrimary else Color.Transparent
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (isSelected) AuraCyanPrimary else AuraDarkBorder,
+                                                RoundedCornerShape(6.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                tint = AuraDarkBackground,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (selectedIds.isNotEmpty()) {
+                        onAddSelectedTracks(selectedIds.toList())
+                    }
+                },
+                enabled = selectedIds.isNotEmpty(),
+                modifier = Modifier.testTag("confirm_add_tracks_to_playlist_btn"),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AuraCyanPrimary,
+                    contentColor = AuraDarkBackground,
+                    disabledContainerColor = AuraDarkSurfaceVariant,
+                    disabledContentColor = AuraTextMuted
+                )
+            ) {
+                Text(
+                    text = if (selectedIds.isEmpty()) "Select Tracks" else "Add (${selectedIds.size})",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = AuraTextMuted)
+            }
+        }
+    )
 }

@@ -78,6 +78,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val isShuffleEnabled = playbackManager.isShuffleEnabled
     val smartShuffleReasons = playbackManager.smartShuffleReasons
     val isGaplessEnabled = playbackManager.isGaplessEnabled
+    val isAutoPlayNext = playbackManager.isAutoPlayNext
     val sleepTimerState = playbackManager.sleepTimerState
 
     // Real-time Visualizer state delegations
@@ -102,6 +103,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val virtualizerLevel = audioFxManager.virtualizerLevel
     val isFxEnabled = audioFxManager.isEnabled
     val currentPresetName = audioFxManager.currentPresetName
+    val equalizerAudioSessionId = audioFxManager.audioSessionId
+
+    fun resetEqualizerFlat() = audioFxManager.resetToFlat()
 
     // UI state for search & filtering
     private val _searchQuery = MutableStateFlow("")
@@ -144,6 +148,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun seekTo(positionMs: Long) = playbackManager.seekTo(positionMs)
 
+    fun seekForward(deltaMs: Long = 10_000L) = playbackManager.seekForward(deltaMs)
+
+    fun seekBack(deltaMs: Long = 10_000L) = playbackManager.seekBack(deltaMs)
+
+    val mediaSession: androidx.media3.session.MediaSession
+        get() = playbackManager.mediaSession
+
     fun skipToNext() = playbackManager.skipToNext()
 
     fun skipToPrevious() = playbackManager.skipToPrevious()
@@ -160,6 +171,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playbackManager.playSmartShuffle(tracks, startingTrack)
 
     fun setGaplessEnabled(enabled: Boolean) = playbackManager.setGaplessEnabled(enabled)
+
+    fun setAutoPlayNext(enabled: Boolean) = playbackManager.setAutoPlayNext(enabled)
 
     fun startSleepTimer(minutes: Int, finishTrack: Boolean = false) = playbackManager.startSleepTimer(minutes, finishTrack)
 
@@ -231,9 +244,27 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun addTracksToPlaylist(playlistId: Long, trackIds: List<String>) {
+        viewModelScope.launch {
+            repository.addTracksToPlaylist(playlistId, trackIds)
+        }
+    }
+
     fun removeTrackFromPlaylist(playlistId: Long, trackId: String) {
         viewModelScope.launch {
             repository.removeTrackFromPlaylist(playlistId, trackId)
+        }
+    }
+
+    fun reorderPlaylistTracks(playlistId: Long, orderedTrackIds: List<String>) {
+        viewModelScope.launch {
+            repository.reorderPlaylistTracks(playlistId, orderedTrackIds)
+        }
+    }
+
+    fun moveTrackInPlaylist(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        viewModelScope.launch {
+            repository.moveTrackInPlaylist(playlistId, fromIndex, toIndex)
         }
     }
 

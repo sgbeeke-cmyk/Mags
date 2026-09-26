@@ -11,14 +11,18 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Equalizer
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.PlaylistPlay
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -39,8 +43,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.player.ShuffleMode
+import com.example.ui.components.ApkExportDialog
 import com.example.ui.components.MiniPlayer
 import com.example.ui.components.SleepTimerDialog
+import com.example.ui.screens.DownloadScreen
 import com.example.ui.screens.EqualizerScreen
 import com.example.ui.screens.PlayerBottomSheet
 import com.example.ui.screens.PlaylistsScreen
@@ -58,7 +64,8 @@ import com.example.ui.viewmodel.MusicViewModel
 enum class AuraTab {
     LIBRARY,
     PLAYLISTS,
-    EQUALIZER
+    EQUALIZER,
+    DOWNLOAD
 }
 
 @Composable
@@ -69,6 +76,7 @@ fun AuraMusicApp(
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var isQueueExpanded by remember { mutableStateOf(false) }
     var isSleepTimerDialogOpen by remember { mutableStateOf(false) }
+    var isApkDialogOpen by remember { mutableStateOf(false) }
 
     val allTracks by viewModel.allTracks.collectAsStateWithLifecycle()
     val hiResTracks by viewModel.hiResTracks.collectAsStateWithLifecycle()
@@ -90,6 +98,7 @@ fun AuraMusicApp(
     val isShuffleEnabled by viewModel.isShuffleEnabled.collectAsStateWithLifecycle()
     val smartShuffleReasons by viewModel.smartShuffleReasons.collectAsStateWithLifecycle()
     val isGaplessEnabled by viewModel.isGaplessEnabled.collectAsStateWithLifecycle()
+    val isAutoPlayNext by viewModel.isAutoPlayNext.collectAsStateWithLifecycle()
     val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
 
     val eqBands by viewModel.equalizerBands.collectAsStateWithLifecycle()
@@ -98,6 +107,7 @@ fun AuraMusicApp(
     val isFxEnabled by viewModel.isFxEnabled.collectAsStateWithLifecycle()
     val currentPresetName by viewModel.currentPresetName.collectAsStateWithLifecycle()
     val presets by viewModel.equalizerPresets.collectAsStateWithLifecycle()
+    val audioSessionId by viewModel.audioSessionId.collectAsStateWithLifecycle()
 
     val inspectingTrack by viewModel.inspectingTrack.collectAsStateWithLifecycle()
 
@@ -119,6 +129,34 @@ fun AuraMusicApp(
             .testTag("aura_app_scaffold"),
         containerColor = AuraDarkBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        floatingActionButton = {
+            if (currentTab != AuraTab.DOWNLOAD && !isPlayerExpanded) {
+                ExtendedFloatingActionButton(
+                    onClick = { isApkDialogOpen = true },
+                    modifier = Modifier
+                        .testTag("floating_download_apk_btn")
+                        .padding(bottom = if (currentTrack != null) 70.dp else 4.dp),
+                    containerColor = AuraCyanPrimary,
+                    contentColor = Color.Black,
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Filled.Download,
+                            contentDescription = "Download APK",
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.Black
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Download APK",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Color.Black
+                        )
+                    }
+                )
+            }
+        },
         bottomBar = {
             Column(
                 modifier = Modifier
@@ -159,7 +197,7 @@ fun AuraMusicApp(
                                 contentDescription = "FLAC Library"
                             )
                         },
-                        label = { Text("Library", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                        label = { Text("Library", fontWeight = FontWeight.SemiBold, fontSize = 10.sp) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = AuraCyanPrimary,
                             selectedTextColor = AuraCyanPrimary,
@@ -179,7 +217,7 @@ fun AuraMusicApp(
                                 contentDescription = "Playlists"
                             )
                         },
-                        label = { Text("Playlists", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                        label = { Text("Playlists", fontWeight = FontWeight.SemiBold, fontSize = 10.sp) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = AuraCyanPrimary,
                             selectedTextColor = AuraCyanPrimary,
@@ -199,7 +237,27 @@ fun AuraMusicApp(
                                 contentDescription = "Equalizer"
                             )
                         },
-                        label = { Text("Equalizer", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                        label = { Text("Equalizer", fontWeight = FontWeight.SemiBold, fontSize = 10.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = AuraCyanPrimary,
+                            selectedTextColor = AuraCyanPrimary,
+                            indicatorColor = Color(0xFF1B2333),
+                            unselectedIconColor = AuraTextMuted,
+                            unselectedTextColor = AuraTextMuted
+                        )
+                    )
+
+                    NavigationBarItem(
+                        selected = currentTab == AuraTab.DOWNLOAD,
+                        onClick = { currentTab = AuraTab.DOWNLOAD },
+                        modifier = Modifier.testTag("nav_download"),
+                        icon = {
+                            Icon(
+                                imageVector = if (currentTab == AuraTab.DOWNLOAD) Icons.Filled.Download else Icons.Outlined.Download,
+                                contentDescription = "Download APK"
+                            )
+                        },
+                        label = { Text("Download APK", fontWeight = FontWeight.SemiBold, fontSize = 10.sp) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = AuraCyanPrimary,
                             selectedTextColor = AuraCyanPrimary,
@@ -282,7 +340,12 @@ fun AuraMusicApp(
                             viewModel.playSmartShuffle(list)
                             isPlayerExpanded = true
                         },
-                        onRemoveTrackFromPlaylist = { plId, trId -> viewModel.removeTrackFromPlaylist(plId, trId) }
+                        onRemoveTrackFromPlaylist = { plId, trId -> viewModel.removeTrackFromPlaylist(plId, trId) },
+                        allLocalTracks = allTracks,
+                        onAddTrackToPlaylist = { plId, trId -> viewModel.addTrackToPlaylist(plId, trId) },
+                        onAddTracksToPlaylist = { plId, trIds -> viewModel.addTracksToPlaylist(plId, trIds) },
+                        onMoveTrack = { plId, from, to -> viewModel.moveTrackInPlaylist(plId, from, to) },
+                        onReorderTracks = { plId, trIds -> viewModel.reorderPlaylistTracks(plId, trIds) }
                     )
                 }
                 AuraTab.EQUALIZER -> {
@@ -300,6 +363,8 @@ fun AuraMusicApp(
                         onVirtualizerChange = { viewModel.setVirtualizer(it) },
                         onApplyPreset = { viewModel.applyPreset(it) },
                         onToggleGapless = { viewModel.setGaplessEnabled(it) },
+                        audioSessionId = audioSessionId,
+                        onResetToFlat = { viewModel.resetEqualizerFlat() },
                         visualizerFrame = visualizerFrame,
                         isPlaying = isPlaying,
                         hasRecordPermission = visualizerHasPermission,
@@ -309,6 +374,9 @@ fun AuraMusicApp(
                         visualizerStyle = visualizerStyle,
                         onSelectVisualizerStyle = { viewModel.setVisualizerStyle(it) }
                     )
+                }
+                AuraTab.DOWNLOAD -> {
+                    DownloadScreen()
                 }
             }
         }
@@ -326,6 +394,7 @@ fun AuraMusicApp(
             isShuffleEnabled = isShuffleEnabled,
             isGaplessEnabled = isGaplessEnabled,
             sleepTimerState = sleepTimerState,
+            isAutoPlayNext = isAutoPlayNext,
             shuffleMode = shuffleMode,
             smartShuffleReason = currentTrack?.id?.let { smartShuffleReasons[it] },
             visualizerFrame = visualizerFrame,
@@ -337,6 +406,8 @@ fun AuraMusicApp(
             onSelectVisualizerStyle = { viewModel.setVisualizerStyle(it) },
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onSeekTo = { viewModel.seekTo(it) },
+            onSeekForward = { viewModel.seekForward() },
+            onSeekBack = { viewModel.seekBack() },
             onSkipNext = { viewModel.skipToNext() },
             onSkipPrevious = { viewModel.skipToPrevious() },
             onToggleRepeat = { viewModel.toggleRepeatMode() },
@@ -348,6 +419,11 @@ fun AuraMusicApp(
             },
             onOpenQueue = { isQueueExpanded = true },
             onOpenSleepTimer = { isSleepTimerDialogOpen = true },
+            onToggleAutoPlayNext = { viewModel.setAutoPlayNext(it) },
+            onToggleGapless = { viewModel.setGaplessEnabled(it) },
+            onStartSleepTimerPreset = { viewModel.startSleepTimer(it, false) },
+            onStartSleepTimerEndOfTrack = { viewModel.startSleepTimerEndOfTrack() },
+            onCancelSleepTimer = { viewModel.cancelSleepTimer() },
             onInspectTrack = { viewModel.inspectTrack(it) },
             onDismiss = { isPlayerExpanded = false }
         )
@@ -399,6 +475,13 @@ fun AuraMusicApp(
                 viewModel.setSleepTimerFinishTrack(finish)
             },
             onDismiss = { isSleepTimerDialogOpen = false }
+        )
+    }
+
+    // APK Download / Export Dialog
+    if (isApkDialogOpen) {
+        ApkExportDialog(
+            onDismissRequest = { isApkDialogOpen = false }
         )
     }
 }

@@ -26,8 +26,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FolderOpen
@@ -39,10 +41,13 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -67,6 +72,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.Playlist
 import com.example.data.model.Track
 import com.example.player.SleepTimerState
+import com.example.ui.components.ApkExportDialog
 import com.example.ui.components.AudioVisualizer
 import com.example.ui.components.HiResBadge
 import com.example.visualizer.VisualizerFrame
@@ -113,6 +119,7 @@ fun TracksScreen(
 ) {
     var selectedFilter by remember { mutableStateOf(TrackFilter.ALL) }
     var searchQuery by remember { mutableStateOf("") }
+    var showApkDialog by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -215,6 +222,29 @@ fun TracksScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
 
+                // APK Download & Export Button
+                Button(
+                    onClick = { showApkDialog = true },
+                    modifier = Modifier.testTag("open_apk_dialog_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AuraCyanPrimary,
+                        contentColor = Color.Black
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Download APK",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.Black
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Download APK", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 // Import FLAC Files Button
                 Button(
                     onClick = {
@@ -239,6 +269,94 @@ fun TracksScreen(
                 }
             }
         }
+
+        // Prominent APK Download Banner
+        Card(
+            modifier = Modifier
+                .testTag("library_apk_download_banner")
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = AuraDarkCard),
+            border = androidx.compose.foundation.BorderStroke(1.dp, AuraCyanPrimary.copy(alpha = 0.5f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showApkDialog = true }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(AuraCyanPrimary.copy(alpha = 0.15f))
+                        .border(1.dp, AuraCyanPrimary, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Download APK",
+                        tint = AuraCyanPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Download Musicy App (.apk)",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AuraTextPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(AuraCyanPrimary)
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "38 MB",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Install standalone app on your Android device",
+                        fontSize = 11.sp,
+                        color = AuraTextSecondary
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = { showApkDialog = true },
+                    modifier = Modifier.testTag("banner_download_apk_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AuraCyanPrimary,
+                        contentColor = Color.Black
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.Black
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Download", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         // Search Bar
         OutlinedTextField(
@@ -424,6 +542,12 @@ fun TracksScreen(
                     Spacer(modifier = Modifier.height(90.dp))
                 }
             }
+        }
+
+        if (showApkDialog) {
+            ApkExportDialog(
+                onDismissRequest = { showApkDialog = false }
+            )
         }
     }
 }
